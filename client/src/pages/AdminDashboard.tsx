@@ -56,7 +56,7 @@ import {
   BookOpen,
   Brain,
   Gauge,
-  LightbulbIcon,
+  Lightbulb,
   Zap,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
