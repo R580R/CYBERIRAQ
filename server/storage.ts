@@ -1,425 +1,498 @@
 import { 
   User, InsertUser, 
-  Template, InsertTemplate, 
-  Proposal, InsertProposal,
-  Activity, InsertActivity,
-  Stats, InsertStats,
-  users, templates, proposals, activities, stats
+  Course, InsertCourse,
+  CourseSection, InsertCourseSection,
+  CourseLesson, InsertCourseLesson,
+  Enrollment, InsertEnrollment,
+  UserCourseProgress, InsertUserCourseProgress,
+  ContactMessage, InsertContactMessage,
+  users, courses, courseSections, courseLessons, enrollments, 
+  userCourseProgress, contactMessages,
+  courseLevelEnum, courseCategoryEnum
 } from "@shared/schema";
+import session from "express-session";
+import connectPg from "connect-pg-simple";
+import { db, pool } from "./db";
+import { eq, and, desc, sql, asc } from "drizzle-orm";
+import { scrypt, randomBytes, timingSafeEqual } from "crypto";
+import { promisify } from "util";
 
 export interface IStorage {
+  // Session store
+  sessionStore: session.Store;
+
   // User operations
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  updateUser(id: number, user: Partial<InsertUser>): Promise<User | undefined>;
 
-  // Template operations
-  getAllTemplates(): Promise<Template[]>;
-  getTemplateById(id: number): Promise<Template | undefined>;
-  createTemplate(template: InsertTemplate): Promise<Template>;
-  updateTemplate(id: number, template: Partial<InsertTemplate>): Promise<Template | undefined>;
-  deleteTemplate(id: number): Promise<boolean>;
+  // Course operations
+  getAllCourses(): Promise<Course[]>;
+  getFeaturedCourses(limit?: number): Promise<Course[]>;
+  getCoursesByCategory(category: string): Promise<Course[]>;
+  getCourseBySlug(slug: string): Promise<Course | undefined>;
+  getCourseById(id: number): Promise<Course | undefined>;
+  createCourse(course: InsertCourse): Promise<Course>;
+  updateCourse(id: number, course: Partial<InsertCourse>): Promise<Course | undefined>;
+  deleteCourse(id: number): Promise<boolean>;
+  incrementCourseEnrollments(id: number): Promise<Course | undefined>;
 
-  // Proposal operations
-  getAllProposals(): Promise<Proposal[]>;
-  getProposalById(id: number): Promise<Proposal | undefined>;
-  getRecentProposals(limit: number): Promise<Proposal[]>;
-  createProposal(proposal: InsertProposal): Promise<Proposal>;
-  updateProposal(id: number, proposal: Partial<InsertProposal>): Promise<Proposal | undefined>;
-  deleteProposal(id: number): Promise<boolean>;
-  incrementProposalViews(id: number): Promise<Proposal | undefined>;
+  // Course section operations
+  getCourseSections(courseId: number): Promise<CourseSection[]>;
+  createCourseSection(section: InsertCourseSection): Promise<CourseSection>;
+  updateCourseSection(id: number, section: Partial<InsertCourseSection>): Promise<CourseSection | undefined>;
+  deleteCourseSection(id: number): Promise<boolean>;
 
-  // Activity operations
-  getAllActivities(): Promise<Activity[]>;
-  getRecentActivities(limit: number): Promise<Activity[]>;
-  createActivity(activity: InsertActivity): Promise<Activity>;
+  // Course lesson operations
+  getCourseLessons(sectionId: number): Promise<CourseLesson[]>;
+  getLessonById(id: number): Promise<CourseLesson | undefined>;
+  createCourseLesson(lesson: InsertCourseLesson): Promise<CourseLesson>;
+  updateCourseLesson(id: number, lesson: Partial<InsertCourseLesson>): Promise<CourseLesson | undefined>;
+  deleteCourseLesson(id: number): Promise<boolean>;
 
-  // Stats operations
-  getStats(): Promise<Stats | undefined>;
-  updateStats(stats: Partial<InsertStats>): Promise<Stats | undefined>;
+  // Enrollment operations
+  getUserEnrollments(userId: number): Promise<Enrollment[]>;
+  getCourseEnrollments(courseId: number): Promise<Enrollment[]>;
+  getEnrollment(userId: number, courseId: number): Promise<Enrollment | undefined>;
+  createEnrollment(enrollment: InsertEnrollment): Promise<Enrollment>;
+  updateEnrollment(id: number, enrollment: Partial<InsertEnrollment>): Promise<Enrollment | undefined>;
+  deleteEnrollment(id: number): Promise<boolean>;
+
+  // User course progress operations
+  getUserProgress(userId: number, lessonId: number): Promise<UserCourseProgress | undefined>;
+  createUserProgress(progress: InsertUserCourseProgress): Promise<UserCourseProgress>;
+  updateUserProgress(id: number, progress: Partial<InsertUserCourseProgress>): Promise<UserCourseProgress | undefined>;
+  getUserLessonProgress(userId: number, courseId: number): Promise<UserCourseProgress[]>;
+
+  // Contact message operations
+  getAllContactMessages(): Promise<ContactMessage[]>;
+  getContactMessageById(id: number): Promise<ContactMessage | undefined>;
+  createContactMessage(message: InsertContactMessage): Promise<ContactMessage>;
+  markContactMessageAsRead(id: number): Promise<ContactMessage | undefined>;
+  deleteContactMessage(id: number): Promise<boolean>;
+
+  // Hash password
+  hashPassword(password: string): Promise<string>;
+  comparePasswords(supplied: string, stored: string): Promise<boolean>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<number, User>;
-  private templates: Map<number, Template>;
-  private proposals: Map<number, Proposal>;
-  private activities: Map<number, Activity>;
-  private stats: Stats | undefined;
-  private currentUserId: number;
-  private currentTemplateId: number;
-  private currentProposalId: number;
-  private currentActivityId: number;
+// Helper utility for password hashing
+const scryptAsync = promisify(scrypt);
+
+export class DatabaseStorage implements IStorage {
+  sessionStore: session.Store;
 
   constructor() {
-    this.users = new Map();
-    this.templates = new Map();
-    this.proposals = new Map();
-    this.activities = new Map();
-    this.currentUserId = 1;
-    this.currentTemplateId = 1;
-    this.currentProposalId = 1;
-    this.currentActivityId = 1;
-
-    // Initialize with some demo templates
-    this.initializeTemplates();
-    // Initialize with demo stats
-    this.initializeStats();
+    const PostgresSessionStore = connectPg(session);
+    this.sessionStore = new PostgresSessionStore({
+      pool,
+      createTableIfMissing: true,
+    });
   }
 
-  // Initialize some templates for demo purposes
-  private initializeTemplates() {
-    const demoTemplates: InsertTemplate[] = [
-      {
-        name: "Digital Marketing Proposal",
-        description: "Perfect for agencies offering digital marketing services",
-        content: JSON.stringify({
-          sections: [
-            { title: "Executive Summary", content: "Overview of our digital marketing approach." },
-            { title: "Scope of Work", content: "Detailed breakdown of services included." },
-            { title: "Timeline", content: "Project milestones and deadlines." },
-            { title: "Investment", content: "Pricing and payment terms." },
-            { title: "Next Steps", content: "How to proceed with the proposal." }
-          ]
-        }),
-        imageUrl: "https://images.unsplash.com/photo-1572044162444-ad60f128bdea?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80",
-        isPopular: true,
-        isNew: false,
-        category: "Marketing"
-      },
-      {
-        name: "Business Consulting",
-        description: "Comprehensive template for consulting services",
-        content: JSON.stringify({
-          sections: [
-            { title: "Executive Summary", content: "Overview of our consulting approach." },
-            { title: "Problem Statement", content: "Analysis of current challenges." },
-            { title: "Proposed Solution", content: "Our recommended approach." },
-            { title: "Methodology", content: "How we'll implement the solution." },
-            { title: "Timeline & Deliverables", content: "Project schedule." },
-            { title: "Investment", content: "Pricing and payment terms." }
-          ]
-        }),
-        imageUrl: "https://images.unsplash.com/photo-1507679799987-c73779587ccf?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80",
-        isPopular: false,
-        isNew: true,
-        category: "Consulting"
-      },
-      {
-        name: "Web Development",
-        description: "Detailed proposal for web development projects",
-        content: JSON.stringify({
-          sections: [
-            { title: "Project Overview", content: "Summary of the web development project." },
-            { title: "Technical Approach", content: "Technologies and methods we'll use." },
-            { title: "Development Phases", content: "Step-by-step project plan." },
-            { title: "Testing & Quality Assurance", content: "Our QA process." },
-            { title: "Hosting & Maintenance", content: "Post-launch support details." },
-            { title: "Investment", content: "Pricing breakdown and payment schedule." }
-          ]
-        }),
-        imageUrl: "https://images.unsplash.com/photo-1581291518633-83b4ebd1d83e?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80",
-        isPopular: false,
-        isNew: false,
-        category: "Development"
-      }
-    ];
-
-    demoTemplates.forEach(template => this.createTemplate(template));
-
-    // Create some demo proposals
-    const demoProposals: InsertProposal[] = [
-      {
-        title: "Digital Marketing Strategy - Acme Inc.",
-        content: JSON.stringify({
-          sections: [
-            { title: "Executive Summary", content: "Digital marketing strategy for Acme Inc." },
-            { title: "Scope of Work", content: "SEO, SEM, Social Media, Email Marketing" },
-            { title: "Timeline", content: "6-month project with monthly deliverables" },
-            { title: "Investment", content: "$5,000 per month" }
-          ]
-        }),
-        createdBy: "Jane Smith",
-        clientName: "Acme Inc.",
-        status: "sent",
-        templateId: 1
-      },
-      {
-        title: "Website Redesign - TechCorp",
-        content: JSON.stringify({
-          sections: [
-            { title: "Project Overview", content: "Complete redesign of TechCorp website" },
-            { title: "Technical Approach", content: "Modern tech stack with React and Node.js" },
-            { title: "Development Phases", content: "Design, Development, Testing, Launch" },
-            { title: "Investment", content: "$15,000 total project" }
-          ]
-        }),
-        createdBy: "Robert Johnson",
-        clientName: "TechCorp",
-        status: "draft",
-        templateId: 3
-      },
-      {
-        title: "Content Marketing - GloboTech",
-        content: JSON.stringify({
-          sections: [
-            { title: "Executive Summary", content: "Content strategy for GloboTech" },
-            { title: "Content Calendar", content: "12-month content plan" },
-            { title: "Distribution Strategy", content: "Multi-channel approach" },
-            { title: "Investment", content: "$3,000 per month" }
-          ]
-        }),
-        createdBy: "Michael Brown",
-        clientName: "GloboTech",
-        status: "accepted",
-        templateId: 1
-      },
-      {
-        title: "SEO Audit - LeadGen Co.",
-        content: JSON.stringify({
-          sections: [
-            { title: "Audit Overview", content: "Comprehensive SEO audit" },
-            { title: "Findings", content: "Current issues and opportunities" },
-            { title: "Recommendations", content: "Action items in priority order" },
-            { title: "Implementation Plan", content: "3-month roadmap" },
-            { title: "Investment", content: "$2,500 one-time fee" }
-          ]
-        }),
-        createdBy: "Sarah Williams",
-        clientName: "LeadGen Co.",
-        status: "declined",
-        templateId: 1
-      }
-    ];
-
-    demoProposals.forEach(proposal => this.createProposal(proposal));
-
-    // Create some demo activities
-    const demoActivities: InsertActivity[] = [
-      {
-        userId: "Robert Johnson",
-        action: "sent",
-        description: "Sent proposal \"Website Redesign\" to TechCorp",
-        proposalId: 2
-      },
-      {
-        userId: "Jane Smith",
-        action: "accepted",
-        description: "Proposal \"Content Marketing\" was accepted by GloboTech",
-        proposalId: 3
-      },
-      {
-        userId: "Michael Brown",
-        action: "created",
-        description: "Created a new proposal \"SEO Strategy\" from template",
-        proposalId: 4
-      },
-      {
-        userId: "Client",
-        action: "viewed",
-        description: "Acme Inc. viewed \"Digital Marketing Strategy\" proposal",
-        proposalId: 1
-      }
-    ];
-
-    demoActivities.forEach(activity => this.createActivity(activity));
+  // Password utilities
+  async hashPassword(password: string): Promise<string> {
+    const salt = randomBytes(16).toString("hex");
+    const buf = (await scryptAsync(password, salt, 64)) as Buffer;
+    return `${buf.toString("hex")}.${salt}`;
   }
 
-  // Initialize stats
-  private initializeStats() {
-    this.stats = {
-      id: 1,
-      totalProposals: 24,
-      acceptedProposals: 18,
-      proposalViews: 143,
-      pendingApprovals: 6,
-      lastUpdated: new Date()
-    };
+  async comparePasswords(supplied: string, stored: string): Promise<boolean> {
+    const [hashed, salt] = stored.split(".");
+    const hashedBuf = Buffer.from(hashed, "hex");
+    const suppliedBuf = (await scryptAsync(supplied, salt, 64)) as Buffer;
+    return timingSafeEqual(hashedBuf, suppliedBuf);
   }
 
   // User operations
   async getUser(id: number): Promise<User | undefined> {
-    return this.users.get(id);
-  }
-
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
-  }
-
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = this.currentUserId++;
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
+    const [user] = await db.select().from(users).where(eq(users.id, id));
     return user;
   }
 
-  // Template operations
-  async getAllTemplates(): Promise<Template[]> {
-    return Array.from(this.templates.values());
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.username, username));
+    return user;
   }
 
-  async getTemplateById(id: number): Promise<Template | undefined> {
-    return this.templates.get(id);
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, email));
+    return user;
   }
 
-  async createTemplate(template: InsertTemplate): Promise<Template> {
-    const id = this.currentTemplateId++;
-    const newTemplate: Template = { ...template, id };
-    this.templates.set(id, newTemplate);
-    return newTemplate;
+  async createUser(user: InsertUser): Promise<User> {
+    const [createdUser] = await db
+      .insert(users)
+      .values({
+        ...user,
+        password: await this.hashPassword(user.password)
+      })
+      .returning();
+    return createdUser;
   }
 
-  async updateTemplate(id: number, templateUpdate: Partial<InsertTemplate>): Promise<Template | undefined> {
-    const template = this.templates.get(id);
-    if (!template) return undefined;
-    
-    const updatedTemplate: Template = { ...template, ...templateUpdate };
-    this.templates.set(id, updatedTemplate);
-    return updatedTemplate;
-  }
-
-  async deleteTemplate(id: number): Promise<boolean> {
-    return this.templates.delete(id);
-  }
-
-  // Proposal operations
-  async getAllProposals(): Promise<Proposal[]> {
-    return Array.from(this.proposals.values());
-  }
-
-  async getProposalById(id: number): Promise<Proposal | undefined> {
-    return this.proposals.get(id);
-  }
-
-  async getRecentProposals(limit: number): Promise<Proposal[]> {
-    return Array.from(this.proposals.values())
-      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-      .slice(0, limit);
-  }
-
-  async createProposal(proposal: InsertProposal): Promise<Proposal> {
-    const id = this.currentProposalId++;
-    const now = new Date();
-    const newProposal: Proposal = {
-      ...proposal,
-      id,
-      views: 0,
-      createdAt: now,
-      updatedAt: now
-    };
-    this.proposals.set(id, newProposal);
-    
-    // Update stats
-    if (this.stats) {
-      this.updateStats({ totalProposals: this.stats.totalProposals + 1 });
-      if (proposal.status === "accepted") {
-        this.updateStats({ acceptedProposals: this.stats.acceptedProposals + 1 });
-      }
+  async updateUser(id: number, userData: Partial<InsertUser>): Promise<User | undefined> {
+    if (userData.password) {
+      userData.password = await this.hashPassword(userData.password);
     }
     
-    return newProposal;
+    const [updatedUser] = await db
+      .update(users)
+      .set(userData)
+      .where(eq(users.id, id))
+      .returning();
+    
+    return updatedUser;
   }
 
-  async updateProposal(id: number, proposalUpdate: Partial<InsertProposal>): Promise<Proposal | undefined> {
-    const proposal = this.proposals.get(id);
-    if (!proposal) return undefined;
+  // Course operations
+  async getAllCourses(): Promise<Course[]> {
+    return db.select().from(courses);
+  }
+
+  async getFeaturedCourses(limit = 6): Promise<Course[]> {
+    return db
+      .select()
+      .from(courses)
+      .where(eq(courses.isFeatured, true))
+      .limit(limit);
+  }
+
+  async getCoursesByCategory(category: string): Promise<Course[]> {
+    return db
+      .select()
+      .from(courses)
+      .where(eq(courses.category, category as any));
+  }
+
+  async getCourseBySlug(slug: string): Promise<Course | undefined> {
+    const [course] = await db
+      .select()
+      .from(courses)
+      .where(eq(courses.slug, slug));
+    return course;
+  }
+
+  async getCourseById(id: number): Promise<Course | undefined> {
+    const [course] = await db
+      .select()
+      .from(courses)
+      .where(eq(courses.id, id));
+    return course;
+  }
+
+  async createCourse(course: InsertCourse): Promise<Course> {
+    const [createdCourse] = await db
+      .insert(courses)
+      .values(course)
+      .returning();
+    return createdCourse;
+  }
+
+  async updateCourse(id: number, course: Partial<InsertCourse>): Promise<Course | undefined> {
+    const [updatedCourse] = await db
+      .update(courses)
+      .set({ ...course, updatedAt: new Date() })
+      .where(eq(courses.id, id))
+      .returning();
     
-    const now = new Date();
-    const updatedProposal: Proposal = {
-      ...proposal,
-      ...proposalUpdate,
-      updatedAt: now
-    };
-    this.proposals.set(id, updatedProposal);
+    return updatedCourse;
+  }
+
+  async deleteCourse(id: number): Promise<boolean> {
+    const result = await db
+      .delete(courses)
+      .where(eq(courses.id, id));
     
-    // Update stats if status changed
-    if (proposalUpdate.status && proposal.status !== proposalUpdate.status && this.stats) {
-      if (proposalUpdate.status === "accepted") {
-        this.updateStats({ acceptedProposals: this.stats.acceptedProposals + 1 });
-      }
-      if (proposal.status === "accepted" && proposalUpdate.status !== "accepted") {
-        this.updateStats({ acceptedProposals: Math.max(0, this.stats.acceptedProposals - 1) });
-      }
+    return !!result;
+  }
+
+  async incrementCourseEnrollments(id: number): Promise<Course | undefined> {
+    const [course] = await db
+      .select()
+      .from(courses)
+      .where(eq(courses.id, id));
+    
+    if (!course) return undefined;
+    
+    const [updatedCourse] = await db
+      .update(courses)
+      .set({ 
+        enrolledStudents: course.enrolledStudents + 1, 
+        updatedAt: new Date() 
+      })
+      .where(eq(courses.id, id))
+      .returning();
+    
+    return updatedCourse;
+  }
+
+  // Course section operations
+  async getCourseSections(courseId: number): Promise<CourseSection[]> {
+    return db
+      .select()
+      .from(courseSections)
+      .where(eq(courseSections.courseId, courseId))
+      .orderBy(asc(courseSections.order));
+  }
+
+  async createCourseSection(section: InsertCourseSection): Promise<CourseSection> {
+    const [createdSection] = await db
+      .insert(courseSections)
+      .values(section)
+      .returning();
+    return createdSection;
+  }
+
+  async updateCourseSection(id: number, section: Partial<InsertCourseSection>): Promise<CourseSection | undefined> {
+    const [updatedSection] = await db
+      .update(courseSections)
+      .set(section)
+      .where(eq(courseSections.id, id))
+      .returning();
+    
+    return updatedSection;
+  }
+
+  async deleteCourseSection(id: number): Promise<boolean> {
+    const result = await db
+      .delete(courseSections)
+      .where(eq(courseSections.id, id));
+    
+    return !!result;
+  }
+
+  // Course lesson operations
+  async getCourseLessons(sectionId: number): Promise<CourseLesson[]> {
+    return db
+      .select()
+      .from(courseLessons)
+      .where(eq(courseLessons.sectionId, sectionId))
+      .orderBy(asc(courseLessons.order));
+  }
+
+  async getLessonById(id: number): Promise<CourseLesson | undefined> {
+    const [lesson] = await db
+      .select()
+      .from(courseLessons)
+      .where(eq(courseLessons.id, id));
+    return lesson;
+  }
+
+  async createCourseLesson(lesson: InsertCourseLesson): Promise<CourseLesson> {
+    const [createdLesson] = await db
+      .insert(courseLessons)
+      .values(lesson)
+      .returning();
+    return createdLesson;
+  }
+
+  async updateCourseLesson(id: number, lesson: Partial<InsertCourseLesson>): Promise<CourseLesson | undefined> {
+    const [updatedLesson] = await db
+      .update(courseLessons)
+      .set(lesson)
+      .where(eq(courseLessons.id, id))
+      .returning();
+    
+    return updatedLesson;
+  }
+
+  async deleteCourseLesson(id: number): Promise<boolean> {
+    const result = await db
+      .delete(courseLessons)
+      .where(eq(courseLessons.id, id));
+    
+    return !!result;
+  }
+
+  // Enrollment operations
+  async getUserEnrollments(userId: number): Promise<Enrollment[]> {
+    return db
+      .select()
+      .from(enrollments)
+      .where(eq(enrollments.userId, userId));
+  }
+
+  async getCourseEnrollments(courseId: number): Promise<Enrollment[]> {
+    return db
+      .select()
+      .from(enrollments)
+      .where(eq(enrollments.courseId, courseId));
+  }
+
+  async getEnrollment(userId: number, courseId: number): Promise<Enrollment | undefined> {
+    const [enrollment] = await db
+      .select()
+      .from(enrollments)
+      .where(
+        and(
+          eq(enrollments.userId, userId),
+          eq(enrollments.courseId, courseId)
+        )
+      );
+    return enrollment;
+  }
+
+  async createEnrollment(enrollment: InsertEnrollment): Promise<Enrollment> {
+    const [createdEnrollment] = await db
+      .insert(enrollments)
+      .values(enrollment)
+      .returning();
+    
+    // Increment the course enrollment count
+    await this.incrementCourseEnrollments(enrollment.courseId);
+    
+    return createdEnrollment;
+  }
+
+  async updateEnrollment(id: number, enrollment: Partial<InsertEnrollment>): Promise<Enrollment | undefined> {
+    const updates: any = { ...enrollment };
+    
+    // If marking as completed, set the completion timestamp
+    if (enrollment.isCompleted === true) {
+      updates.completedAt = new Date();
     }
     
-    return updatedProposal;
+    const [updatedEnrollment] = await db
+      .update(enrollments)
+      .set(updates)
+      .where(eq(enrollments.id, id))
+      .returning();
+    
+    return updatedEnrollment;
   }
 
-  async deleteProposal(id: number): Promise<boolean> {
-    const proposal = this.proposals.get(id);
-    if (!proposal) return false;
+  async deleteEnrollment(id: number): Promise<boolean> {
+    const result = await db
+      .delete(enrollments)
+      .where(eq(enrollments.id, id));
     
-    const result = this.proposals.delete(id);
+    return !!result;
+  }
+
+  // User course progress operations
+  async getUserProgress(userId: number, lessonId: number): Promise<UserCourseProgress | undefined> {
+    const [progress] = await db
+      .select()
+      .from(userCourseProgress)
+      .where(
+        and(
+          eq(userCourseProgress.userId, userId),
+          eq(userCourseProgress.lessonId, lessonId)
+        )
+      );
+    return progress;
+  }
+
+  async createUserProgress(progress: InsertUserCourseProgress): Promise<UserCourseProgress> {
+    const [createdProgress] = await db
+      .insert(userCourseProgress)
+      .values(progress)
+      .returning();
+    return createdProgress;
+  }
+
+  async updateUserProgress(id: number, progress: Partial<InsertUserCourseProgress>): Promise<UserCourseProgress | undefined> {
+    const updates: any = { ...progress, lastAccessedAt: new Date() };
     
-    // Update stats
-    if (result && this.stats) {
-      this.updateStats({ totalProposals: Math.max(0, this.stats.totalProposals - 1) });
-      if (proposal.status === "accepted") {
-        this.updateStats({ acceptedProposals: Math.max(0, this.stats.acceptedProposals - 1) });
-      }
+    // If marking as completed, set the completion timestamp
+    if (progress.isCompleted === true) {
+      updates.completedAt = new Date();
     }
     
-    return result;
-  }
-
-  async incrementProposalViews(id: number): Promise<Proposal | undefined> {
-    const proposal = this.proposals.get(id);
-    if (!proposal) return undefined;
+    const [updatedProgress] = await db
+      .update(userCourseProgress)
+      .set(updates)
+      .where(eq(userCourseProgress.id, id))
+      .returning();
     
-    const updatedProposal: Proposal = {
-      ...proposal,
-      views: proposal.views + 1,
-      updatedAt: new Date()
-    };
-    this.proposals.set(id, updatedProposal);
+    return updatedProgress;
+  }
+
+  async getUserLessonProgress(userId: number, courseId: number): Promise<UserCourseProgress[]> {
+    // This is more complex as we need to join with lessons to get the ones for the course
+    // First, get all sections for the course
+    const sections = await db
+      .select()
+      .from(courseSections)
+      .where(eq(courseSections.courseId, courseId));
     
-    // Update stats
-    if (this.stats) {
-      this.updateStats({ proposalViews: this.stats.proposalViews + 1 });
-    }
+    if (!sections.length) return [];
     
-    return updatedProposal;
-  }
-
-  // Activity operations
-  async getAllActivities(): Promise<Activity[]> {
-    return Array.from(this.activities.values());
-  }
-
-  async getRecentActivities(limit: number): Promise<Activity[]> {
-    return Array.from(this.activities.values())
-      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-      .slice(0, limit);
-  }
-
-  async createActivity(activity: InsertActivity): Promise<Activity> {
-    const id = this.currentActivityId++;
-    const newActivity: Activity = {
-      ...activity,
-      id,
-      timestamp: new Date()
-    };
-    this.activities.set(id, newActivity);
-    return newActivity;
-  }
-
-  // Stats operations
-  async getStats(): Promise<Stats | undefined> {
-    return this.stats;
-  }
-
-  async updateStats(statsUpdate: Partial<InsertStats>): Promise<Stats | undefined> {
-    if (!this.stats) return undefined;
+    // Get all lesson IDs for these sections
+    const sectionIds = sections.map(section => section.id);
     
-    this.stats = {
-      ...this.stats,
-      ...statsUpdate,
-      lastUpdated: new Date()
-    };
+    // Get all lessons for these sections
+    const lessons = await db
+      .select()
+      .from(courseLessons)
+      .where(sql`${courseLessons.sectionId} IN (${sectionIds.join(',')})`);
     
-    return this.stats;
+    if (!lessons.length) return [];
+    
+    // Get all progress records for this user and these lessons
+    const lessonIds = lessons.map(lesson => lesson.id);
+    
+    return db
+      .select()
+      .from(userCourseProgress)
+      .where(
+        and(
+          eq(userCourseProgress.userId, userId),
+          sql`${userCourseProgress.lessonId} IN (${lessonIds.join(',')})`
+        )
+      );
+  }
+
+  // Contact message operations
+  async getAllContactMessages(): Promise<ContactMessage[]> {
+    return db
+      .select()
+      .from(contactMessages)
+      .orderBy(desc(contactMessages.createdAt));
+  }
+
+  async getContactMessageById(id: number): Promise<ContactMessage | undefined> {
+    const [message] = await db
+      .select()
+      .from(contactMessages)
+      .where(eq(contactMessages.id, id));
+    return message;
+  }
+
+  async createContactMessage(message: InsertContactMessage): Promise<ContactMessage> {
+    const [createdMessage] = await db
+      .insert(contactMessages)
+      .values(message)
+      .returning();
+    return createdMessage;
+  }
+
+  async markContactMessageAsRead(id: number): Promise<ContactMessage | undefined> {
+    const [updatedMessage] = await db
+      .update(contactMessages)
+      .set({ isRead: true, readAt: new Date() })
+      .where(eq(contactMessages.id, id))
+      .returning();
+    
+    return updatedMessage;
+  }
+
+  async deleteContactMessage(id: number): Promise<boolean> {
+    const result = await db
+      .delete(contactMessages)
+      .where(eq(contactMessages.id, id));
+    
+    return !!result;
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();

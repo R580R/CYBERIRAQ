@@ -1,322 +1,459 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertTemplateSchema, insertProposalSchema, insertActivitySchema } from "@shared/schema";
-import { fromZodError } from "zod-validation-error";
+import { setupAuth } from "./auth";
+import sgMail from "@sendgrid/mail";
+import {
+  insertCourseSchema,
+  insertCourseSectionSchema,
+  insertCourseLessonSchema,
+  insertUserSchema,
+  insertEnrollmentSchema,
+  insertUserCourseProgressSchema,
+  insertContactMessageSchema,
+} from "@shared/schema";
+import { z } from "zod";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Templates API routes
-  app.get("/api/templates", async (req: Request, res: Response) => {
+  // Setup authentication
+  const { ensureAuthenticated } = setupAuth(app);
+
+  // SendGrid setup
+  if (process.env.SENDGRID_API_KEY) {
+    sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+  }
+
+  // ===== Courses =====
+  app.get("/api/courses", async (req: Request, res: Response) => {
     try {
-      const templates = await storage.getAllTemplates();
-      res.json(templates);
+      const courses = await storage.getAllCourses();
+      res.json(courses);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch templates" });
+      console.error("Error fetching courses:", error);
+      res.status(500).json({ error: "Failed to fetch courses" });
     }
   });
 
-  app.get("/api/templates/:id", async (req: Request, res: Response) => {
+  app.get("/api/courses/featured", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
-      if (isNaN(id)) {
-        return res.status(400).json({ message: "Invalid template ID" });
-      }
-
-      const template = await storage.getTemplateById(id);
-      if (!template) {
-        return res.status(404).json({ message: "Template not found" });
-      }
-
-      res.json(template);
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+      const courses = await storage.getFeaturedCourses(limit);
+      res.json(courses);
     } catch (error) {
-      res.status(500).json({ message: "Failed to fetch template" });
+      console.error("Error fetching featured courses:", error);
+      res.status(500).json({ error: "Failed to fetch featured courses" });
     }
   });
 
-  app.post("/api/templates", async (req: Request, res: Response) => {
+  app.get("/api/courses/category/:category", async (req: Request, res: Response) => {
     try {
-      const result = insertTemplateSchema.safeParse(req.body);
-      if (!result.success) {
-        const errorMessage = fromZodError(result.error).message;
-        return res.status(400).json({ message: errorMessage });
-      }
-
-      const template = await storage.createTemplate(result.data);
-      res.status(201).json(template);
+      const courses = await storage.getCoursesByCategory(req.params.category);
+      res.json(courses);
     } catch (error) {
-      res.status(500).json({ message: "Failed to create template" });
+      console.error(`Error fetching courses for category ${req.params.category}:`, error);
+      res.status(500).json({ error: "Failed to fetch courses by category" });
     }
   });
 
-  app.put("/api/templates/:id", async (req: Request, res: Response) => {
+  app.get("/api/courses/:slug", async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
-      if (isNaN(id)) {
-        return res.status(400).json({ message: "Invalid template ID" });
-      }
-
-      const result = insertTemplateSchema.partial().safeParse(req.body);
-      if (!result.success) {
-        const errorMessage = fromZodError(result.error).message;
-        return res.status(400).json({ message: errorMessage });
-      }
-
-      const updatedTemplate = await storage.updateTemplate(id, result.data);
-      if (!updatedTemplate) {
-        return res.status(404).json({ message: "Template not found" });
-      }
-
-      res.json(updatedTemplate);
-    } catch (error) {
-      res.status(500).json({ message: "Failed to update template" });
-    }
-  });
-
-  app.delete("/api/templates/:id", async (req: Request, res: Response) => {
-    try {
-      const id = parseInt(req.params.id);
-      if (isNaN(id)) {
-        return res.status(400).json({ message: "Invalid template ID" });
-      }
-
-      const success = await storage.deleteTemplate(id);
-      if (!success) {
-        return res.status(404).json({ message: "Template not found" });
-      }
-
-      res.status(204).send();
-    } catch (error) {
-      res.status(500).json({ message: "Failed to delete template" });
-    }
-  });
-
-  // Proposals API routes
-  app.get("/api/proposals", async (req: Request, res: Response) => {
-    try {
-      const proposals = await storage.getAllProposals();
-      res.json(proposals);
-    } catch (error) {
-      res.status(500).json({ message: "Failed to fetch proposals" });
-    }
-  });
-
-  app.get("/api/proposals/recent", async (req: Request, res: Response) => {
-    try {
-      const limit = parseInt(req.query.limit as string) || 4;
-      const proposals = await storage.getRecentProposals(limit);
-      res.json(proposals);
-    } catch (error) {
-      res.status(500).json({ message: "Failed to fetch recent proposals" });
-    }
-  });
-
-  app.get("/api/proposals/:id", async (req: Request, res: Response) => {
-    try {
-      const id = parseInt(req.params.id);
-      if (isNaN(id)) {
-        return res.status(400).json({ message: "Invalid proposal ID" });
-      }
-
-      const proposal = await storage.getProposalById(id);
-      if (!proposal) {
-        return res.status(404).json({ message: "Proposal not found" });
-      }
-
-      res.json(proposal);
-    } catch (error) {
-      res.status(500).json({ message: "Failed to fetch proposal" });
-    }
-  });
-
-  app.post("/api/proposals", async (req: Request, res: Response) => {
-    try {
-      const result = insertProposalSchema.safeParse(req.body);
-      if (!result.success) {
-        const errorMessage = fromZodError(result.error).message;
-        return res.status(400).json({ message: errorMessage });
-      }
-
-      const proposal = await storage.createProposal(result.data);
+      const course = await storage.getCourseBySlug(req.params.slug);
       
-      // Create activity for the new proposal
-      await storage.createActivity({
-        userId: proposal.createdBy,
-        action: "created",
-        description: `Created a new proposal "${proposal.title}"`,
-        proposalId: proposal.id
+      if (!course) {
+        return res.status(404).json({ error: "Course not found" });
+      }
+      
+      res.json(course);
+    } catch (error) {
+      console.error(`Error fetching course with slug ${req.params.slug}:`, error);
+      res.status(500).json({ error: "Failed to fetch course" });
+    }
+  });
+
+  app.post("/api/courses", ensureAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const validatedData = insertCourseSchema.parse(req.body);
+      const course = await storage.createCourse(validatedData);
+      res.status(201).json(course);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      console.error("Error creating course:", error);
+      res.status(500).json({ error: "Failed to create course" });
+    }
+  });
+
+  app.put("/api/courses/:id", ensureAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const courseId = parseInt(req.params.id, 10);
+      const course = await storage.updateCourse(courseId, req.body);
+      
+      if (!course) {
+        return res.status(404).json({ error: "Course not found" });
+      }
+      
+      res.json(course);
+    } catch (error) {
+      console.error(`Error updating course ${req.params.id}:`, error);
+      res.status(500).json({ error: "Failed to update course" });
+    }
+  });
+
+  app.delete("/api/courses/:id", ensureAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const courseId = parseInt(req.params.id, 10);
+      const result = await storage.deleteCourse(courseId);
+      
+      if (!result) {
+        return res.status(404).json({ error: "Course not found" });
+      }
+      
+      res.sendStatus(204);
+    } catch (error) {
+      console.error(`Error deleting course ${req.params.id}:`, error);
+      res.status(500).json({ error: "Failed to delete course" });
+    }
+  });
+
+  // ===== Course Sections =====
+  app.get("/api/courses/:courseId/sections", async (req: Request, res: Response) => {
+    try {
+      const courseId = parseInt(req.params.courseId, 10);
+      const sections = await storage.getCourseSections(courseId);
+      res.json(sections);
+    } catch (error) {
+      console.error(`Error fetching sections for course ${req.params.courseId}:`, error);
+      res.status(500).json({ error: "Failed to fetch course sections" });
+    }
+  });
+
+  app.post("/api/courses/:courseId/sections", ensureAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const courseId = parseInt(req.params.courseId, 10);
+      const validatedData = insertCourseSectionSchema.parse({
+        ...req.body,
+        courseId
       });
       
-      res.status(201).json(proposal);
+      const section = await storage.createCourseSection(validatedData);
+      res.status(201).json(section);
     } catch (error) {
-      res.status(500).json({ message: "Failed to create proposal" });
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      console.error(`Error creating section for course ${req.params.courseId}:`, error);
+      res.status(500).json({ error: "Failed to create course section" });
     }
   });
 
-  app.put("/api/proposals/:id", async (req: Request, res: Response) => {
+  app.put("/api/sections/:id", ensureAuthenticated, async (req: Request, res: Response) => {
     try {
-      const id = parseInt(req.params.id);
-      if (isNaN(id)) {
-        return res.status(400).json({ message: "Invalid proposal ID" });
+      const sectionId = parseInt(req.params.id, 10);
+      const section = await storage.updateCourseSection(sectionId, req.body);
+      
+      if (!section) {
+        return res.status(404).json({ error: "Section not found" });
       }
+      
+      res.json(section);
+    } catch (error) {
+      console.error(`Error updating section ${req.params.id}:`, error);
+      res.status(500).json({ error: "Failed to update section" });
+    }
+  });
 
-      const result = insertProposalSchema.partial().safeParse(req.body);
-      if (!result.success) {
-        const errorMessage = fromZodError(result.error).message;
-        return res.status(400).json({ message: errorMessage });
+  app.delete("/api/sections/:id", ensureAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const sectionId = parseInt(req.params.id, 10);
+      const result = await storage.deleteCourseSection(sectionId);
+      
+      if (!result) {
+        return res.status(404).json({ error: "Section not found" });
       }
+      
+      res.sendStatus(204);
+    } catch (error) {
+      console.error(`Error deleting section ${req.params.id}:`, error);
+      res.status(500).json({ error: "Failed to delete section" });
+    }
+  });
 
-      const originalProposal = await storage.getProposalById(id);
-      if (!originalProposal) {
-        return res.status(404).json({ message: "Proposal not found" });
+  // ===== Course Lessons =====
+  app.get("/api/sections/:sectionId/lessons", async (req: Request, res: Response) => {
+    try {
+      const sectionId = parseInt(req.params.sectionId, 10);
+      const lessons = await storage.getCourseLessons(sectionId);
+      res.json(lessons);
+    } catch (error) {
+      console.error(`Error fetching lessons for section ${req.params.sectionId}:`, error);
+      res.status(500).json({ error: "Failed to fetch section lessons" });
+    }
+  });
+
+  app.get("/api/lessons/:id", async (req: Request, res: Response) => {
+    try {
+      const lessonId = parseInt(req.params.id, 10);
+      const lesson = await storage.getLessonById(lessonId);
+      
+      if (!lesson) {
+        return res.status(404).json({ error: "Lesson not found" });
       }
+      
+      res.json(lesson);
+    } catch (error) {
+      console.error(`Error fetching lesson ${req.params.id}:`, error);
+      res.status(500).json({ error: "Failed to fetch lesson" });
+    }
+  });
 
-      const updatedProposal = await storage.updateProposal(id, result.data);
-      if (!updatedProposal) {
-        return res.status(404).json({ message: "Proposal not found" });
+  app.post("/api/sections/:sectionId/lessons", ensureAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const sectionId = parseInt(req.params.sectionId, 10);
+      const validatedData = insertCourseLessonSchema.parse({
+        ...req.body,
+        sectionId
+      });
+      
+      const lesson = await storage.createCourseLesson(validatedData);
+      res.status(201).json(lesson);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
       }
+      console.error(`Error creating lesson for section ${req.params.sectionId}:`, error);
+      res.status(500).json({ error: "Failed to create lesson" });
+    }
+  });
 
-      // Create activity for status change
-      if (result.data.status && originalProposal.status !== result.data.status) {
-        await storage.createActivity({
-          userId: updatedProposal.createdBy,
-          action: result.data.status,
-          description: `Proposal "${updatedProposal.title}" status changed to ${result.data.status}`,
-          proposalId: updatedProposal.id
+  app.put("/api/lessons/:id", ensureAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const lessonId = parseInt(req.params.id, 10);
+      const lesson = await storage.updateCourseLesson(lessonId, req.body);
+      
+      if (!lesson) {
+        return res.status(404).json({ error: "Lesson not found" });
+      }
+      
+      res.json(lesson);
+    } catch (error) {
+      console.error(`Error updating lesson ${req.params.id}:`, error);
+      res.status(500).json({ error: "Failed to update lesson" });
+    }
+  });
+
+  app.delete("/api/lessons/:id", ensureAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const lessonId = parseInt(req.params.id, 10);
+      const result = await storage.deleteCourseLesson(lessonId);
+      
+      if (!result) {
+        return res.status(404).json({ error: "Lesson not found" });
+      }
+      
+      res.sendStatus(204);
+    } catch (error) {
+      console.error(`Error deleting lesson ${req.params.id}:`, error);
+      res.status(500).json({ error: "Failed to delete lesson" });
+    }
+  });
+
+  // ===== Enrollments =====
+  app.get("/api/user/enrollments", ensureAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.user as any).id;
+      const enrollments = await storage.getUserEnrollments(userId);
+      res.json(enrollments);
+    } catch (error) {
+      console.error("Error fetching user enrollments:", error);
+      res.status(500).json({ error: "Failed to fetch enrollments" });
+    }
+  });
+
+  app.post("/api/courses/:courseId/enroll", ensureAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const courseId = parseInt(req.params.courseId, 10);
+      const userId = (req.user as any).id;
+      
+      // Check if already enrolled
+      const existingEnrollment = await storage.getEnrollment(userId, courseId);
+      if (existingEnrollment) {
+        return res.status(400).json({ error: "Already enrolled in this course" });
+      }
+      
+      const validatedData = insertEnrollmentSchema.parse({
+        userId,
+        courseId,
+        isCompleted: false
+      });
+      
+      const enrollment = await storage.createEnrollment(validatedData);
+      res.status(201).json(enrollment);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      console.error(`Error enrolling in course ${req.params.courseId}:`, error);
+      res.status(500).json({ error: "Failed to enroll in course" });
+    }
+  });
+
+  app.put("/api/enrollments/:id", ensureAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const enrollmentId = parseInt(req.params.id, 10);
+      const enrollment = await storage.updateEnrollment(enrollmentId, req.body);
+      
+      if (!enrollment) {
+        return res.status(404).json({ error: "Enrollment not found" });
+      }
+      
+      res.json(enrollment);
+    } catch (error) {
+      console.error(`Error updating enrollment ${req.params.id}:`, error);
+      res.status(500).json({ error: "Failed to update enrollment" });
+    }
+  });
+
+  // ===== Course Progress =====
+  app.get("/api/progress/:lessonId", ensureAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const lessonId = parseInt(req.params.lessonId, 10);
+      const userId = (req.user as any).id;
+      
+      const progress = await storage.getUserProgress(userId, lessonId);
+      res.json(progress || { isCompleted: false });
+    } catch (error) {
+      console.error(`Error fetching progress for lesson ${req.params.lessonId}:`, error);
+      res.status(500).json({ error: "Failed to fetch progress" });
+    }
+  });
+
+  app.post("/api/progress/:lessonId", ensureAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const lessonId = parseInt(req.params.lessonId, 10);
+      const userId = (req.user as any).id;
+      
+      // Check if progress already exists
+      let progress = await storage.getUserProgress(userId, lessonId);
+      
+      if (progress) {
+        // Update existing progress
+        progress = await storage.updateUserProgress(progress.id, {
+          isCompleted: req.body.isCompleted
         });
+      } else {
+        // Create new progress
+        const validatedData = insertUserCourseProgressSchema.parse({
+          userId,
+          lessonId,
+          isCompleted: req.body.isCompleted
+        });
+        
+        progress = await storage.createUserProgress(validatedData);
       }
-
-      res.json(updatedProposal);
-    } catch (error) {
-      res.status(500).json({ message: "Failed to update proposal" });
-    }
-  });
-
-  app.delete("/api/proposals/:id", async (req: Request, res: Response) => {
-    try {
-      const id = parseInt(req.params.id);
-      if (isNaN(id)) {
-        return res.status(400).json({ message: "Invalid proposal ID" });
-      }
-
-      const success = await storage.deleteProposal(id);
-      if (!success) {
-        return res.status(404).json({ message: "Proposal not found" });
-      }
-
-      res.status(204).send();
-    } catch (error) {
-      res.status(500).json({ message: "Failed to delete proposal" });
-    }
-  });
-
-  app.post("/api/proposals/:id/view", async (req: Request, res: Response) => {
-    try {
-      const id = parseInt(req.params.id);
-      if (isNaN(id)) {
-        return res.status(400).json({ message: "Invalid proposal ID" });
-      }
-
-      const updatedProposal = await storage.incrementProposalViews(id);
-      if (!updatedProposal) {
-        return res.status(404).json({ message: "Proposal not found" });
-      }
-
-      // Create activity for the view
-      await storage.createActivity({
-        userId: "Client",
-        action: "viewed",
-        description: `${updatedProposal.clientName} viewed "${updatedProposal.title}" proposal`,
-        proposalId: updatedProposal.id
-      });
-
-      res.json(updatedProposal);
-    } catch (error) {
-      res.status(500).json({ message: "Failed to increment views" });
-    }
-  });
-
-  // Activities API routes
-  app.get("/api/activities", async (req: Request, res: Response) => {
-    try {
-      const activities = await storage.getAllActivities();
-      res.json(activities);
-    } catch (error) {
-      res.status(500).json({ message: "Failed to fetch activities" });
-    }
-  });
-
-  app.get("/api/activities/recent", async (req: Request, res: Response) => {
-    try {
-      const limit = parseInt(req.query.limit as string) || 4;
-      const activities = await storage.getRecentActivities(limit);
-      res.json(activities);
-    } catch (error) {
-      res.status(500).json({ message: "Failed to fetch recent activities" });
-    }
-  });
-
-  app.post("/api/activities", async (req: Request, res: Response) => {
-    try {
-      const result = insertActivitySchema.safeParse(req.body);
-      if (!result.success) {
-        const errorMessage = fromZodError(result.error).message;
-        return res.status(400).json({ message: errorMessage });
-      }
-
-      const activity = await storage.createActivity(result.data);
-      res.status(201).json(activity);
-    } catch (error) {
-      res.status(500).json({ message: "Failed to create activity" });
-    }
-  });
-
-  // Stats API route
-  app.get("/api/stats", async (req: Request, res: Response) => {
-    try {
-      const stats = await storage.getStats();
-      if (!stats) {
-        return res.status(404).json({ message: "Stats not found" });
-      }
-      res.json(stats);
-    } catch (error) {
-      res.status(500).json({ message: "Failed to fetch stats" });
-    }
-  });
-
-  // Export proposal to PDF (mock endpoint that returns success)
-  app.post("/api/proposals/:id/export", async (req: Request, res: Response) => {
-    try {
-      const id = parseInt(req.params.id);
-      if (isNaN(id)) {
-        return res.status(400).json({ message: "Invalid proposal ID" });
-      }
-
-      const proposal = await storage.getProposalById(id);
-      if (!proposal) {
-        return res.status(404).json({ message: "Proposal not found" });
-      }
-
-      // In a real implementation, this would generate a PDF
-      // For this mockup, we'll just respond with a success message
       
-      // Create activity for the export
-      await storage.createActivity({
-        userId: proposal.createdBy,
-        action: "exported",
-        description: `Exported proposal "${proposal.title}" to ${req.body.format || 'PDF'}`,
-        proposalId: proposal.id
-      });
-
-      res.json({ 
-        success: true, 
-        message: "Proposal exported successfully",
-        fileName: `${proposal.title.replace(/\s+/g, '_')}.${req.body.format || 'pdf'}`
-      });
+      res.status(201).json(progress);
     } catch (error) {
-      res.status(500).json({ message: "Failed to export proposal" });
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      console.error(`Error updating progress for lesson ${req.params.lessonId}:`, error);
+      res.status(500).json({ error: "Failed to update progress" });
+    }
+  });
+
+  app.get("/api/courses/:courseId/progress", ensureAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const courseId = parseInt(req.params.courseId, 10);
+      const userId = (req.user as any).id;
+      
+      const progress = await storage.getUserLessonProgress(userId, courseId);
+      res.json(progress);
+    } catch (error) {
+      console.error(`Error fetching progress for course ${req.params.courseId}:`, error);
+      res.status(500).json({ error: "Failed to fetch course progress" });
+    }
+  });
+
+  // ===== Contact Form =====
+  app.post("/api/contact", async (req: Request, res: Response) => {
+    try {
+      const validatedData = insertContactMessageSchema.parse(req.body);
+      const message = await storage.createContactMessage(validatedData);
+      
+      // Send email notification
+      if (process.env.SENDGRID_API_KEY) {
+        const msg = {
+          to: 'asaerf0001@gmail.com',
+          from: 'noreply@cyberiraq.com',
+          subject: 'New Contact Form Submission',
+          text: `Name: ${validatedData.name}\nEmail: ${validatedData.email}\nPhone: ${validatedData.phone || 'Not provided'}\n\nMessage: ${validatedData.message}`,
+          html: `
+            <h2>New Contact Form Submission</h2>
+            <p><strong>Name:</strong> ${validatedData.name}</p>
+            <p><strong>Email:</strong> ${validatedData.email}</p>
+            <p><strong>Phone:</strong> ${validatedData.phone || 'Not provided'}</p>
+            <p><strong>Message:</strong></p>
+            <p>${validatedData.message.replace(/\n/g, '<br>')}</p>
+          `,
+        };
+        
+        try {
+          await sgMail.send(msg);
+        } catch (emailError) {
+          console.error('Error sending email notification:', emailError);
+          // Continue with the response even if email fails
+        }
+      }
+      
+      res.status(201).json({ success: true, messageId: message.id });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      console.error("Error processing contact message:", error);
+      res.status(500).json({ error: "Failed to send message" });
+    }
+  });
+
+  // Admin only - contact message management
+  app.get("/api/admin/contact-messages", ensureAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const user = req.user as any;
+      if (user.role !== 'admin') {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      const messages = await storage.getAllContactMessages();
+      res.json(messages);
+    } catch (error) {
+      console.error("Error fetching contact messages:", error);
+      res.status(500).json({ error: "Failed to fetch messages" });
+    }
+  });
+
+  app.put("/api/admin/contact-messages/:id/read", ensureAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const user = req.user as any;
+      if (user.role !== 'admin') {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      const messageId = parseInt(req.params.id, 10);
+      const message = await storage.markContactMessageAsRead(messageId);
+      
+      if (!message) {
+        return res.status(404).json({ error: "Message not found" });
+      }
+      
+      res.json(message);
+    } catch (error) {
+      console.error(`Error marking message ${req.params.id} as read:`, error);
+      res.status(500).json({ error: "Failed to update message" });
     }
   });
 
   const httpServer = createServer(app);
+
   return httpServer;
 }

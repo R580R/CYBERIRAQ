@@ -8,112 +8,143 @@
   }
 
   body {
-    @apply font-sans antialiased bg-neutral-50 text-neutral-800;
+    @apply font-sans antialiased bg-black text-white;
   }
 
   :root {
-    --background: 0 0% 98%;
-    --foreground: 0 0% 9%;
+    /* Cyber Iraq Theme - Hacker-style with black background and red accents */
+    
+    /* Base colors */
+    --background: 0 0% 0%; /* Pure black */
+    --foreground: 0 0% 100%; /* White */
 
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 9%;
+    /* Card components */
+    --card: 0 0% 7%; /* Very dark gray, almost black */
+    --card-foreground: 0 0% 100%; /* White */
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 9%;
+    /* Popover components */
+    --popover: 0 0% 7%; /* Very dark gray, almost black */
+    --popover-foreground: 0 0% 100%; /* White */
 
-    --sidebar-background: 220 100% 98%;
-    --sidebar-foreground: 220 100% 9%;
-    --sidebar-primary: 220 100% 50%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 220 100% 60%;
-    --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 220 100% 50%;
+    /* Sidebar styling */
+    --sidebar-background: 0 0% 5%; /* Nearly black */
+    --sidebar-foreground: 0 0% 100%; /* White */
+    --sidebar-primary: 0 100% 50%; /* Bright red */
+    --sidebar-primary-foreground: 0 0% 100%; /* White */
+    --sidebar-accent: 0 80% 60%; /* Lighter red */
+    --sidebar-accent-foreground: 0 0% 100%; /* White */
+    --sidebar-border: 0 0% 15%; /* Dark gray */
+    --sidebar-ring: 0 100% 50%; /* Bright red */
 
-    --chart-1: 220 100% 50%;
-    --chart-2: 142 70% 45%;
-    --chart-3: 33 100% 58%;
-    --chart-4: 0 74% 49%;
-    --chart-5: 262 83% 58%;
+    /* Chart colors */
+    --chart-1: 0 100% 50%; /* Red */
+    --chart-2: 0 0% 70%; /* Light gray */
+    --chart-3: 0 0% 40%; /* Mid gray */
+    --chart-4: 0 0% 90%; /* Very light gray */
+    --chart-5: 0 70% 30%; /* Dark red */
 
-    --primary: 220 100% 50%;
-    --primary-foreground: 0 0% 100%;
+    /* Primary actions */
+    --primary: 0 100% 50%; /* Bright red */
+    --primary-foreground: 0 0% 100%; /* White */
 
-    --secondary: 142 70% 45%;
-    --secondary-foreground: 0 0% 100%;
+    /* Secondary actions */
+    --secondary: 0 0% 15%; /* Dark gray */
+    --secondary-foreground: 0 0% 100%; /* White */
 
-    --accent: 33 100% 58%;
-    --accent-foreground: 0 0% 9%;
+    /* Accent elements */
+    --accent: 0 80% 60%; /* Light red */
+    --accent-foreground: 0 0% 0%; /* Black */
 
-    --destructive: 0 74% 49%;
-    --destructive-foreground: 0 0% 100%;
+    /* Destructive actions */
+    --destructive: 0 100% 45%; /* Deep red */
+    --destructive-foreground: 0 0% 100%; /* White */
 
-    --muted: 0 0% 97%;
-    --muted-foreground: 0 0% 45%;
+    /* Muted elements */
+    --muted: 0 0% 10%; /* Very dark gray */
+    --muted-foreground: 0 0% 65%; /* Light gray */
 
-    --border: 0 0% 90%;
-    --input: 0 0% 90%;
-    --ring: 220 100% 50%;
+    /* Borders and inputs */
+    --border: 0 0% 20%; /* Dark gray */
+    --input: 0 0% 20%; /* Dark gray */
+    --ring: 0 100% 50%; /* Bright red */
 
-    --radius: 0.5rem;
-  }
-
-  .dark {
-    --background: 0 0% 9%;
-    --foreground: 0 0% 98%;
-
-    --card: 0 0% 13%;
-    --card-foreground: 0 0% 98%;
-
-    --popover: 0 0% 13%;
-    --popover-foreground: 0 0% 98%;
-
-    --primary: 220 100% 50%;
-    --primary-foreground: 0 0% 100%;
-
-    --secondary: 142 70% 45%;
-    --secondary-foreground: 0 0% 100%;
-
-    --accent: 33 100% 58%;
-    --accent-foreground: 0 0% 98%;
-
-    --destructive: 0 74% 49%;
-    --destructive-foreground: 0 0% 100%;
-
-    --muted: 0 0% 15%;
-    --muted-foreground: 0 0% 65%;
-
-    --border: 0 0% 20%;
-    --input: 0 0% 20%;
-    --ring: 220 100% 50%;
+    --radius: 0.375rem; /* Slightly smaller radius for sharper look */
   }
 }
 
-/* Custom styles for focus states */
-.focus-ring:focus {
-  outline: 2px solid #0F62FE;
-  outline-offset: 2px;
+/* Custom Matrix-like animation for specific elements */
+@keyframes matrix-effect {
+  0% {
+    text-shadow: 0 0 1px rgba(255, 0, 0, 0.1);
+  }
+  50% {
+    text-shadow: 0 0 5px rgba(255, 0, 0, 0.8);
+  }
+  100% {
+    text-shadow: 0 0 1px rgba(255, 0, 0, 0.1);
+  }
 }
 
-/* Rich text editor styling */
-.editor-toolbar button {
-  @apply px-2 py-1 rounded hover:bg-neutral-100;
+.matrix-text {
+  animation: matrix-effect 2s infinite;
 }
 
-/* Custom scrollbar */
+/* Custom hacker-style glitch effect */
+@keyframes glitch {
+  0% {
+    transform: translate(0);
+    text-shadow: 0 0 2px rgba(255, 0, 0, 0.7);
+  }
+  20% {
+    transform: translate(-1px, 1px);
+    text-shadow: 1px 0 2px rgba(255, 0, 0, 0.7);
+  }
+  40% {
+    transform: translate(1px, -1px);
+    text-shadow: -1px 0 2px rgba(255, 0, 0, 0.7);
+  }
+  60% {
+    transform: translate(1px, 1px);
+    text-shadow: 0 1px 2px rgba(255, 0, 0, 0.7);
+  }
+  80% {
+    transform: translate(-1px, -1px);
+    text-shadow: 0 -1px 2px rgba(255, 0, 0, 0.7);
+  }
+  100% {
+    transform: translate(0);
+    text-shadow: 0 0 2px rgba(255, 0, 0, 0.7);
+  }
+}
+
+.glitch-effect:hover {
+  animation: glitch 0.3s linear;
+}
+
+/* Custom scrollbar - hacker style */
 ::-webkit-scrollbar {
   width: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: #0a0a0a;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #c6c6c6;
-  border-radius: 4px;
+  background: #ff0000;
+  border-radius: 2px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
+  background: #cc0000;
+}
+
+/* Custom code blocks with hacker-style terminal appearance */
+.code-block {
+  @apply font-mono bg-gray-900 border border-red-700 p-4 rounded-md;
+}
+
+.code-block::before {
+  content: '> ';
+  @apply text-red-500;
 }
