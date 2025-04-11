@@ -226,7 +226,7 @@ export class DatabaseStorage implements IStorage {
     const [updatedCourse] = await db
       .update(courses)
       .set({ 
-        enrolledStudents: course.enrolledStudents + 1, 
+        enrolledStudents: (course.enrolledStudents || 0) + 1, 
         updatedAt: new Date() 
       })
       .where(eq(courses.id, id))
