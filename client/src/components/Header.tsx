@@ -25,6 +25,11 @@ const Header = () => {
     setIsMobileMenuOpen(!isMobileMenuOpen);
   };
 
+  // Close mobile menu when a link is clicked
+  const closeMobileMenu = () => {
+    setIsMobileMenuOpen(false);
+  };
+
   return (
     <header className="bg-black bg-opacity-95 backdrop-blur-sm border-b border-gray-800 sticky top-0 z-40 shadow-lg shadow-black/50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -156,21 +161,35 @@ const Header = () => {
       
       {/* Mobile menu */}
       <div 
-        className={`fixed inset-0 z-30 bg-gradient-to-b from-black to-gray-900 bg-opacity-95 backdrop-blur-sm transition-all duration-300 md:hidden ${
-          isMobileMenuOpen ? 'opacity-100 pointer-events-auto top-0' : 'opacity-0 pointer-events-none -top-full'
+        className={`fixed inset-0 z-50 bg-gradient-to-b from-black to-gray-900 bg-opacity-95 backdrop-blur-sm transition-all duration-300 md:hidden ${
+          isMobileMenuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
         }`}
-        style={{ height: "100vh" }}
+        style={{ 
+          height: "100vh", 
+          transform: isMobileMenuOpen ? 'translateY(0)' : 'translateY(-100%)'
+        }}
       >
         <div className="absolute inset-0 bg-gradient-to-b from-red-900/5 via-transparent to-transparent"></div>
         
         <div className="relative pt-20 pb-6 px-4 space-y-1 overflow-y-auto max-h-screen">
+          {/* Close button in the top-right corner */}
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={closeMobileMenu}
+            className="absolute top-5 right-5 text-white bg-gray-800/70 hover:bg-red-800/70 rounded-full hover:scale-105 transition-all duration-200"
+          >
+            <X className="h-5 w-5" />
+            <span className="sr-only">Close menu</span>
+          </Button>
+          
           <div className="mb-6 px-3">
             <div className="h-0.5 w-12 bg-gradient-to-r from-red-500 to-transparent mb-6"></div>
             <h3 className="text-lg font-bold text-white mb-1">Navigation</h3>
             <p className="text-sm text-gray-400">Access our cybersecurity resources</p>
           </div>
           
-          <MobileNavLink href="/" isActive={isActive("/")}>
+          <MobileNavLink href="/" isActive={isActive("/")} onClick={closeMobileMenu}>
             <div className="flex items-center">
               <div className="flex items-center justify-center h-8 w-8 rounded-md bg-gray-800 mr-3">
                 <Shield className="h-4 w-4 text-red-500" />
@@ -178,7 +197,7 @@ const Header = () => {
               <span>Home</span>
             </div>
           </MobileNavLink>
-          <MobileNavLink href="/courses" isActive={isActive("/courses")}>
+          <MobileNavLink href="/courses" isActive={isActive("/courses")} onClick={closeMobileMenu}>
             <div className="flex items-center">
               <div className="flex items-center justify-center h-8 w-8 rounded-md bg-gray-800 mr-3">
                 <BookOpen className="h-4 w-4 text-red-500" />
@@ -186,7 +205,7 @@ const Header = () => {
               <span>Courses</span>
             </div>
           </MobileNavLink>
-          <MobileNavLink href="/blog" isActive={isActive("/blog")}>
+          <MobileNavLink href="/blog" isActive={isActive("/blog")} onClick={closeMobileMenu}>
             <div className="flex items-center">
               <div className="flex items-center justify-center h-8 w-8 rounded-md bg-gray-800 mr-3">
                 <Code className="h-4 w-4 text-red-500" />
@@ -194,7 +213,7 @@ const Header = () => {
               <span>Blog</span>
             </div>
           </MobileNavLink>
-          <MobileNavLink href="/tools" isActive={isActive("/tools")}>
+          <MobileNavLink href="/tools" isActive={isActive("/tools")} onClick={closeMobileMenu}>
             <div className="flex items-center">
               <div className="flex items-center justify-center h-8 w-8 rounded-md bg-gray-800 mr-3">
                 <Server className="h-4 w-4 text-red-500" />
@@ -202,7 +221,7 @@ const Header = () => {
               <span>Tools</span>
             </div>
           </MobileNavLink>
-          <MobileNavLink href="/about" isActive={isActive("/about")}>
+          <MobileNavLink href="/about" isActive={isActive("/about")} onClick={closeMobileMenu}>
             <div className="flex items-center">
               <div className="flex items-center justify-center h-8 w-8 rounded-md bg-gray-800 mr-3">
                 <Layers className="h-4 w-4 text-red-500" />
@@ -213,7 +232,7 @@ const Header = () => {
           
           {user && (
             <>
-              <MobileNavLink href="/dashboard" isActive={isActive("/dashboard")}>
+              <MobileNavLink href="/dashboard" isActive={isActive("/dashboard")} onClick={closeMobileMenu}>
                 <div className="flex items-center">
                   <div className="flex items-center justify-center h-8 w-8 rounded-md bg-gray-800 mr-3">
                     <User className="h-4 w-4 text-red-500" />
@@ -223,7 +242,7 @@ const Header = () => {
               </MobileNavLink>
               
               {user.role === "admin" && (
-                <MobileNavLink href="/admin" isActive={isActive("/admin")}>
+                <MobileNavLink href="/admin" isActive={isActive("/admin")} onClick={closeMobileMenu}>
                   <div className="flex items-center">
                     <div className="flex items-center justify-center h-8 w-8 rounded-md bg-gray-800 mr-3">
                       <Shield className="h-4 w-4 text-red-500" />
@@ -242,6 +261,7 @@ const Header = () => {
                 asChild 
                 variant="outline" 
                 className="border-red-800/50 text-white hover:bg-gray-800 hover:border-red-700 transition-colors duration-200"
+                onClick={closeMobileMenu}
               >
                 <Link href="/auth">
                   <User className="h-4 w-4 mr-2" />
@@ -251,6 +271,7 @@ const Header = () => {
               <Button 
                 asChild 
                 className="bg-gradient-to-r from-red-500 to-red-700 hover:from-red-600 hover:to-red-800 shadow-lg shadow-red-900/20"
+                onClick={closeMobileMenu}
               >
                 <Link href="/auth?tab=register">
                   <Shield className="h-4 w-4 mr-2" />
@@ -269,6 +290,7 @@ interface NavLinkProps {
   href: string;
   isActive: boolean;
   children: React.ReactNode;
+  onClick?: () => void;
 }
 
 const NavLink = ({ href, isActive, children }: NavLinkProps) => {
@@ -284,7 +306,7 @@ const NavLink = ({ href, isActive, children }: NavLinkProps) => {
   );
 };
 
-const MobileNavLink = ({ href, isActive, children }: NavLinkProps) => {
+const MobileNavLink = ({ href, isActive, children, onClick }: NavLinkProps) => {
   const activeClass = isActive
     ? "bg-gray-900/70 border-l-2 border-red-500 text-white shadow-sm"
     : "border-l-2 border-transparent text-gray-300 hover:bg-gray-900/50 hover:text-white hover:border-red-500/30";
@@ -293,6 +315,7 @@ const MobileNavLink = ({ href, isActive, children }: NavLinkProps) => {
     <Link 
       href={href} 
       className={`${activeClass} block pl-3 pr-4 py-3 text-base font-medium rounded-md transition-all duration-200 mb-1 hover:translate-x-1`}
+      onClick={onClick}
     >
       {children}
     </Link>
