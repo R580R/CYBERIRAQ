@@ -157,12 +157,13 @@ const Header = () => {
       {/* Mobile menu */}
       <div 
         className={`fixed inset-0 z-30 bg-gradient-to-b from-black to-gray-900 bg-opacity-95 backdrop-blur-sm transition-all duration-300 md:hidden ${
-          isMobileMenuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+          isMobileMenuOpen ? 'opacity-100 pointer-events-auto top-0' : 'opacity-0 pointer-events-none -top-full'
         }`}
+        style={{ height: "100vh" }}
       >
         <div className="absolute inset-0 bg-gradient-to-b from-red-900/5 via-transparent to-transparent"></div>
         
-        <div className="relative pt-16 pb-6 px-4 space-y-1">
+        <div className="relative pt-20 pb-6 px-4 space-y-1 overflow-y-auto max-h-screen">
           <div className="mb-6 px-3">
             <div className="h-0.5 w-12 bg-gradient-to-r from-red-500 to-transparent mb-6"></div>
             <h3 className="text-lg font-bold text-white mb-1">Navigation</h3>
