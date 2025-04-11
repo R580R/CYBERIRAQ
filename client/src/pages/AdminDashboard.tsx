@@ -442,7 +442,7 @@ function AIEnhancement() {
             <FeatureCard
               title="Content Suggestions"
               description="Get AI-powered suggestions to improve the quality, clarity, and engagement of your course content."
-              icon={LightbulbIcon}
+              icon={Lightbulb}
               onClick={() => setActiveFeature("content-suggestions")}
             />
             
@@ -523,7 +523,7 @@ function ContentSuggestions() {
   return (
     <div>
       <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-        <LightbulbIcon className="h-5 w-5 text-yellow-500" />
+        <Lightbulb className="h-5 w-5 text-yellow-500" />
         Content Suggestions
       </h3>
       
