@@ -74,23 +74,37 @@ export default function AuthPage() {
     <div className="flex min-h-[calc(100vh-4rem)] bg-black">
       {/* Left section with form */}
       <div className="flex-1 flex items-center justify-center p-6">
-        <Card className="w-full max-w-md border-red-500 bg-black text-white">
-          <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl font-bold text-center bg-gradient-to-r from-red-500 to-red-700 text-transparent bg-clip-text">
-              {tab === "login" ? "Login to Cyber Iraq" : "Join Cyber Iraq"}
+        <Card className="w-full max-w-md border border-gray-800 hover:border-red-700/70 bg-gray-900 text-white shadow-xl shadow-red-900/10 transition-colors duration-300">
+          <div className="absolute inset-0 rounded-lg bg-gradient-to-br from-red-900/20 via-transparent to-transparent blur-xl opacity-50 -z-10"></div>
+          <CardHeader className="space-y-2">
+            <div className="mx-auto mb-2 rounded-full bg-black/30 p-2 border border-red-700/30 w-12 h-12 flex items-center justify-center">
+              {tab === "login" ? (
+                <Lock className="w-6 h-6 text-red-500" />
+              ) : (
+                <UserCircle className="w-6 h-6 text-red-500" />
+              )}
+            </div>
+            <CardTitle className="text-2xl font-bold text-center text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-red-700">
+              {tab === "login" ? "Access Your Account" : "Join Cyber Iraq"}
             </CardTitle>
             <CardDescription className="text-center text-gray-400">
               {tab === "login" 
-                ? "Enter your credentials to access your account" 
+                ? "Enter your credentials to continue your training" 
                 : "Create an account to start your cybersecurity journey"}
             </CardDescription>
           </CardHeader>
           <Tabs value={tab} onValueChange={setTab} className="w-full">
-            <TabsList className="grid grid-cols-2 mb-4 bg-gray-900">
-              <TabsTrigger value="login" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-600 data-[state=active]:to-red-800 data-[state=active]:text-white">
+            <TabsList className="grid grid-cols-2 mb-6 bg-black/50 p-1 rounded-lg mx-6 border border-gray-800">
+              <TabsTrigger 
+                value="login" 
+                className="rounded data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-600 data-[state=active]:to-red-800 data-[state=active]:text-white data-[state=active]:shadow-md transition-all duration-300"
+              >
                 Login
               </TabsTrigger>
-              <TabsTrigger value="register" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-600 data-[state=active]:to-red-800 data-[state=active]:text-white">
+              <TabsTrigger 
+                value="register" 
+                className="rounded data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-600 data-[state=active]:to-red-800 data-[state=active]:text-white data-[state=active]:shadow-md transition-all duration-300"
+              >
                 Register
               </TabsTrigger>
             </TabsList>

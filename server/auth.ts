@@ -114,6 +114,30 @@ export function setupAuth(app: Express) {
       });
     })(req, res, next);
   });
+  
+  // Admin login - separate endpoint for admin authentication
+  app.post("/api/admin/login", (req: Request, res: Response, next: NextFunction) => {
+    passport.authenticate("local", (err: Error, user: UserType, info: { message: string }) => {
+      if (err) return next(err);
+      
+      if (!user) {
+        return res.status(401).json({ error: info.message || "Authentication failed" });
+      }
+      
+      // Check if the user has admin role
+      if (user.role !== 'admin') {
+        return res.status(403).json({ error: "Access denied. Admin privileges required." });
+      }
+      
+      req.login(user, (loginErr) => {
+        if (loginErr) return next(loginErr);
+        
+        // Don't send the password back
+        const { password, ...userWithoutPassword } = user;
+        return res.json(userWithoutPassword);
+      });
+    })(req, res, next);
+  });
 
   app.post("/api/logout", (req: Request, res: Response) => {
     req.logout((err) => {
@@ -142,5 +166,17 @@ export function setupAuth(app: Express) {
     res.status(401).json({ error: "Authentication required" });
   };
 
-  return { ensureAuthenticated };
+  // Middleware to ensure user has admin role
+  const ensureAdmin = (req: Request, res: Response, next: NextFunction) => {
+    if (req.isAuthenticated()) {
+      const user = req.user as UserType;
+      if (user.role === 'admin') {
+        return next();
+      }
+      return res.status(403).json({ error: "Access denied. Admin privileges required." });
+    }
+    res.status(401).json({ error: "Authentication required" });
+  };
+
+  return { ensureAuthenticated, ensureAdmin };
 }

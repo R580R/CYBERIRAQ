@@ -173,52 +173,83 @@ export default function HomePage() {
   );
 
   // Course card component
-  const CourseCard = ({ course }: { course: Course }) => (
-    <Card className="overflow-hidden bg-gray-900 border-gray-800 hover:border-red-700 transition-all">
-      <div className="h-48 bg-gray-800 relative">
-        {course.imageUrl ? (
-          <img 
-            src={course.imageUrl} 
-            alt={course.title} 
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          <div className="flex items-center justify-center h-full bg-gradient-to-br from-gray-900 to-black">
-            <Shield className="h-16 w-16 text-red-500 opacity-50" />
+  const CourseCard = ({ course }: { course: Course }) => {
+    // Get the appropriate icon based on course level
+    const getLevelIcon = () => {
+      switch (course.level) {
+        case 'beginner':
+          return <Shield className="h-4 w-4 text-green-400" />;
+        case 'intermediate':
+          return <Shield className="h-4 w-4 text-yellow-400" />;
+        case 'advanced':
+          return <Shield className="h-4 w-4 text-red-400" />;
+        default:
+          return <Shield className="h-4 w-4 text-gray-400" />;
+      }
+    };
+
+    // Get the appropriate class for level badge
+    const getLevelClass = () => {
+      switch (course.level) {
+        case 'beginner':
+          return "absolute top-2 right-2 bg-green-900/60 backdrop-blur-sm text-xs font-medium rounded px-2 py-1 border border-green-700 text-green-300 flex items-center gap-1";
+        case 'intermediate':
+          return "absolute top-2 right-2 bg-yellow-900/60 backdrop-blur-sm text-xs font-medium rounded px-2 py-1 border border-yellow-700 text-yellow-300 flex items-center gap-1";
+        case 'advanced':
+          return "absolute top-2 right-2 bg-red-900/60 backdrop-blur-sm text-xs font-medium rounded px-2 py-1 border border-red-700 text-red-300 flex items-center gap-1";
+        default:
+          return "absolute top-2 right-2 bg-gray-900/60 backdrop-blur-sm text-xs font-medium rounded px-2 py-1 border border-gray-700 text-gray-300 flex items-center gap-1";
+      }
+    };
+
+    return (
+      <Card className="overflow-hidden bg-gray-900 border-gray-800 hover:border-red-700 hover:shadow-lg hover:shadow-red-900/10 hover:translate-y-[-5px] transition-transform transition-shadow transition-colors duration-300">
+        <div className="h-48 bg-gray-900 relative overflow-hidden group">
+          {course.imageUrl ? (
+            <img 
+              src={course.imageUrl} 
+              alt={course.title} 
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            />
+          ) : (
+            <div className="flex items-center justify-center h-full bg-gradient-to-br from-gray-900 to-black">
+              <Shield className="h-16 w-16 text-red-500 opacity-50 group-hover:scale-110 transition-transform duration-300" />
+            </div>
+          )}
+          <div className={getLevelClass()}>
+            {getLevelIcon()}
+            <span className="uppercase">{course.level}</span>
           </div>
-        )}
-        <div className="absolute top-2 right-2 bg-black bg-opacity-75 text-xs uppercase font-bold rounded px-2 py-1 border border-red-500 text-red-500">
-          {course.level}
         </div>
-      </div>
-      <CardHeader>
-        <CardTitle className="text-white">{course.title}</CardTitle>
-        <CardDescription className="text-gray-400 line-clamp-2">
-          {course.description}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="flex items-center justify-between text-sm text-gray-400">
-          <div>
-            <span className="text-red-500 font-bold">{course.duration}</span> minutes
+        <CardHeader>
+          <CardTitle className="text-white">{course.title}</CardTitle>
+          <CardDescription className="text-gray-400 line-clamp-2">
+            {course.description}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between text-sm text-gray-400">
+            <div>
+              <span className="text-red-500 font-bold">{course.duration}</span> minutes
+            </div>
+            <div>
+              <span className="text-red-500 font-bold">{course.enrolledStudents || 0}</span> students
+            </div>
           </div>
-          <div>
-            <span className="text-red-500 font-bold">{course.enrolledStudents}</span> students
-          </div>
-        </div>
-      </CardContent>
-      <CardFooter>
-        <Button 
-          asChild
-          className="w-full bg-gradient-to-r from-red-500 to-red-700 hover:from-red-600 hover:to-red-800"
-        >
-          <Link href={`/courses/${course.slug}`}>
-            Explore Course
-          </Link>
-        </Button>
-      </CardFooter>
-    </Card>
-  );
+        </CardContent>
+        <CardFooter>
+          <Button 
+            asChild
+            className="w-full bg-gradient-to-r from-red-500 to-red-700 hover:from-red-600 hover:to-red-800 hover:scale-[1.02] transition-transform duration-200"
+          >
+            <Link href={`/courses/${course.slug}`}>
+              Explore Course
+            </Link>
+          </Button>
+        </CardFooter>
+      </Card>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-black text-white">

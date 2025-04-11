@@ -13,14 +13,23 @@ import {
   insertContactMessageSchema,
 } from "@shared/schema";
 import { z } from "zod";
+import {
+  generateContentSuggestions,
+  enhanceExerciseChallenge,
+  analyzeCourseStructure,
+  verifyTechnicalAccuracy
+} from "./ai";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication
-  const { ensureAuthenticated } = setupAuth(app);
+  const { ensureAuthenticated, ensureAdmin } = setupAuth(app);
 
   // SendGrid setup
-  if (process.env.SENDGRID_API_KEY) {
+  if (process.env.SENDGRID_API_KEY && process.env.SENDGRID_API_KEY.startsWith('SG.')) {
     sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+    console.log("SendGrid API key configured correctly");
+  } else {
+    console.warn("SendGrid API key is not set or doesn't start with 'SG.'. Email features will not work properly.");
   }
 
   // ===== Courses =====
@@ -70,7 +79,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/courses", ensureAuthenticated, async (req: Request, res: Response) => {
+  app.post("/api/courses", ensureAdmin, async (req: Request, res: Response) => {
     try {
       const validatedData = insertCourseSchema.parse(req.body);
       const course = await storage.createCourse(validatedData);
@@ -84,7 +93,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/courses/:id", ensureAuthenticated, async (req: Request, res: Response) => {
+  app.put("/api/courses/:id", ensureAdmin, async (req: Request, res: Response) => {
     try {
       const courseId = parseInt(req.params.id, 10);
       const course = await storage.updateCourse(courseId, req.body);
@@ -100,7 +109,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/courses/:id", ensureAuthenticated, async (req: Request, res: Response) => {
+  app.delete("/api/courses/:id", ensureAdmin, async (req: Request, res: Response) => {
     try {
       const courseId = parseInt(req.params.id, 10);
       const result = await storage.deleteCourse(courseId);
@@ -128,7 +137,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/courses/:courseId/sections", ensureAuthenticated, async (req: Request, res: Response) => {
+  app.post("/api/courses/:courseId/sections", ensureAdmin, async (req: Request, res: Response) => {
     try {
       const courseId = parseInt(req.params.courseId, 10);
       const validatedData = insertCourseSectionSchema.parse({
@@ -147,7 +156,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/sections/:id", ensureAuthenticated, async (req: Request, res: Response) => {
+  app.put("/api/sections/:id", ensureAdmin, async (req: Request, res: Response) => {
     try {
       const sectionId = parseInt(req.params.id, 10);
       const section = await storage.updateCourseSection(sectionId, req.body);
@@ -163,7 +172,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/sections/:id", ensureAuthenticated, async (req: Request, res: Response) => {
+  app.delete("/api/sections/:id", ensureAdmin, async (req: Request, res: Response) => {
     try {
       const sectionId = parseInt(req.params.id, 10);
       const result = await storage.deleteCourseSection(sectionId);
@@ -207,7 +216,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/sections/:sectionId/lessons", ensureAuthenticated, async (req: Request, res: Response) => {
+  app.post("/api/sections/:sectionId/lessons", ensureAdmin, async (req: Request, res: Response) => {
     try {
       const sectionId = parseInt(req.params.sectionId, 10);
       const validatedData = insertCourseLessonSchema.parse({
@@ -226,7 +235,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/lessons/:id", ensureAuthenticated, async (req: Request, res: Response) => {
+  app.put("/api/lessons/:id", ensureAdmin, async (req: Request, res: Response) => {
     try {
       const lessonId = parseInt(req.params.id, 10);
       const lesson = await storage.updateCourseLesson(lessonId, req.body);
@@ -242,7 +251,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/lessons/:id", ensureAuthenticated, async (req: Request, res: Response) => {
+  app.delete("/api/lessons/:id", ensureAdmin, async (req: Request, res: Response) => {
     try {
       const lessonId = parseInt(req.params.id, 10);
       const result = await storage.deleteCourseLesson(lessonId);
@@ -417,13 +426,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin only - contact message management
-  app.get("/api/admin/contact-messages", ensureAuthenticated, async (req: Request, res: Response) => {
+  app.get("/api/admin/contact-messages", ensureAdmin, async (req: Request, res: Response) => {
     try {
-      const user = req.user as any;
-      if (user.role !== 'admin') {
-        return res.status(403).json({ error: "Access denied" });
-      }
-      
       const messages = await storage.getAllContactMessages();
       res.json(messages);
     } catch (error) {
@@ -432,13 +436,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/admin/contact-messages/:id/read", ensureAuthenticated, async (req: Request, res: Response) => {
+  app.put("/api/admin/contact-messages/:id/read", ensureAdmin, async (req: Request, res: Response) => {
     try {
-      const user = req.user as any;
-      if (user.role !== 'admin') {
-        return res.status(403).json({ error: "Access denied" });
-      }
-      
       const messageId = parseInt(req.params.id, 10);
       const message = await storage.markContactMessageAsRead(messageId);
       
@@ -450,6 +449,139 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error(`Error marking message ${req.params.id} as read:`, error);
       res.status(500).json({ error: "Failed to update message" });
+    }
+  });
+  
+  // Admin only - delete contact message
+  app.delete("/api/admin/contact-messages/:id", ensureAdmin, async (req: Request, res: Response) => {
+    try {
+      const messageId = parseInt(req.params.id, 10);
+      const result = await storage.deleteContactMessage(messageId);
+      
+      if (!result) {
+        return res.status(404).json({ error: "Message not found" });
+      }
+      
+      res.sendStatus(204);
+    } catch (error) {
+      console.error(`Error deleting message ${req.params.id}:`, error);
+      res.status(500).json({ error: "Failed to delete message" });
+    }
+  });
+
+  // ===== AI-Powered Content Enhancement =====
+
+  // Generate content suggestions for courses, lessons, or exercises
+  app.post("/api/ai/content-suggestions", ensureAdmin, async (req: Request, res: Response) => {
+    try {
+      const { title, content, contentType } = req.body;
+      
+      if (!title || !content || !contentType) {
+        return res.status(400).json({ error: "Title, content, and contentType are required" });
+      }
+      
+      if (!["course", "lesson", "exercise"].includes(contentType)) {
+        return res.status(400).json({ error: "contentType must be one of: course, lesson, exercise" });
+      }
+      
+      const suggestions = await generateContentSuggestions(
+        title, 
+        content, 
+        contentType as "course" | "lesson" | "exercise"
+      );
+      
+      res.json(suggestions);
+    } catch (error) {
+      console.error("Error generating content suggestions:", error);
+      res.status(500).json({ 
+        error: "Failed to generate content suggestions",
+        details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Enhance exercise challenge
+  app.post("/api/ai/enhance-exercise", ensureAdmin, async (req: Request, res: Response) => {
+    try {
+      const { title, description, difficulty } = req.body;
+      
+      if (!title || !description || !difficulty) {
+        return res.status(400).json({ error: "Title, description, and difficulty are required" });
+      }
+      
+      if (!["beginner", "intermediate", "advanced"].includes(difficulty)) {
+        return res.status(400).json({ error: "difficulty must be one of: beginner, intermediate, advanced" });
+      }
+      
+      const enhancedExercise = await enhanceExerciseChallenge(
+        title, 
+        description, 
+        difficulty as "beginner" | "intermediate" | "advanced"
+      );
+      
+      res.json(enhancedExercise);
+    } catch (error) {
+      console.error("Error enhancing exercise:", error);
+      res.status(500).json({ 
+        error: "Failed to enhance exercise challenge",
+        details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Analyze course structure
+  app.post("/api/ai/analyze-course-structure", ensureAdmin, async (req: Request, res: Response) => {
+    try {
+      const { title, sections } = req.body;
+      
+      if (!title || !Array.isArray(sections) || sections.length === 0) {
+        return res.status(400).json({ error: "Title and sections array are required" });
+      }
+      
+      for (const section of sections) {
+        if (!section.title || !section.description) {
+          return res.status(400).json({ error: "Each section must have a title and description" });
+        }
+      }
+      
+      const analysis = await analyzeCourseStructure(title, sections);
+      res.json(analysis);
+    } catch (error) {
+      console.error("Error analyzing course structure:", error);
+      res.status(500).json({ 
+        error: "Failed to analyze course structure",
+        details: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  // Verify technical accuracy
+  app.post("/api/ai/verify-accuracy", ensureAdmin, async (req: Request, res: Response) => {
+    try {
+      const { content, contentType } = req.body;
+      
+      if (!content || !contentType) {
+        return res.status(400).json({ error: "Content and contentType are required" });
+      }
+      
+      if (!["networking", "cryptography", "pentest", "malware", "general"].includes(contentType)) {
+        return res.status(400).json({ 
+          error: "contentType must be one of: networking, cryptography, pentest, malware, general" 
+        });
+      }
+      
+      const verification = await verifyTechnicalAccuracy(
+        content, 
+        contentType as "networking" | "cryptography" | "pentest" | "malware" | "general"
+      );
+      
+      res.json(verification);
+    } catch (error) {
+      console.error("Error verifying technical accuracy:", error);
+      res.status(500).json({ 
+        error: "Failed to verify technical accuracy",
+        details: error instanceof Error ? error.message : String(error)
+      });
     }
   });
 
